@@ -16,7 +16,7 @@
         <p id="loadingText" class="text-base font-medium">กำลังโหลดข้อมูล...</p>
     </div>
 
-    <div class="max-w-6xl mx-auto bg-white rounded-xl shadow-lg p-6 md:p-8">
+    <div class="max-w-7xl mx-auto bg-white rounded-xl shadow-lg p-6 md:p-8">
         <div class="border-b pb-4 mb-6">
             <h1 class="text-2xl font-bold text-slate-800">ระบบสำรวจความต้องการสั่งซื้อสินค้า</h1>
             <p class="text-slate-500 text-sm mt-1">รายการสินค้าทั้งหมดพร้อมประวัติยอดขาย ดึงตรงจาก Google Sheets</p>
@@ -68,17 +68,18 @@
                     <table class="w-full text-left border-collapse text-sm">
                         <thead class="bg-slate-100 text-slate-700 uppercase font-semibold text-xs border-b">
                             <tr>
-                                <th class="p-3 w-16 text-center">ลำดับ</th>
-                                <th class="p-3">รหัสสินค้า & ชื่อสินค้า</th>
-                                <th class="p-3 w-24 text-center">หน่วยนับ</th>
-                                <th class="p-3 w-32 text-center bg-blue-50 text-blue-900">ยอดขาย<br>ม.ค.-มี.ค. 69</th>
-                                <th class="p-3 w-32 text-center bg-emerald-50 text-emerald-900">ยอดขาย<br>เดือนก่อนหน้า</th>
-                                <th class="p-3 w-36 text-center bg-amber-50 text-amber-900">จำนวนที่ต้องการสั่ง</th>
+                                <th class="p-3 w-12 text-center">ลำดับ</th>
+                                <th class="p-3 min-w-[200px]">รหัสสินค้า & ชื่อสินค้า</th>
+                                <th class="p-3 w-20 text-center">หน่วยนับ</th>
+                                <th class="p-3 w-28 text-center bg-purple-50 text-purple-900 border-l border-r border-slate-200">ยอดขายทั้งปี<br>(รวมทั้งหมด)</th>
+                                <th class="p-3 w-28 text-center bg-blue-50 text-blue-900 border-r border-slate-200">ยอดขาย<br>ม.ค.-มี.ค. 69</th>
+                                <th class="p-3 w-28 text-center bg-emerald-50 text-emerald-900 border-r border-slate-200">ยอดขาย<br>เดือนก่อนหน้า</th>
+                                <th class="p-3 w-32 text-center bg-amber-50 text-amber-900">จำนวนที่ต้องการสั่ง</th>
                             </tr>
                         </thead>
                         <tbody id="productTableBody" class="divide-y divide-slate-200">
                             <tr>
-                                <td colspan="6" class="p-8 text-center text-slate-400">
+                                <td colspan="7" class="p-8 text-center text-slate-400">
                                     โปรดเลือก "บริษัท" และ "สาขา" ด้านบนเพื่อโหลดรายการสินค้า
                                 </td>
                             </tr>
@@ -150,7 +151,7 @@
 
             document.getElementById('productTableBody').innerHTML = `
                 <tr>
-                    <td colspan="6" class="p-8 text-center text-slate-400">
+                    <td colspan="7" class="p-8 text-center text-slate-400">
                         โปรดเลือกสาขาเพื่อแสดงรายการสินค้า
                     </td>
                 </tr>`;
@@ -184,7 +185,7 @@
         function renderTable(products) {
             const tbody = document.getElementById('productTableBody');
             if (!products || products.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="6" class="p-8 text-center text-slate-400">ไม่พบสินค้า</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="7" class="p-8 text-center text-slate-400">ไม่พบสินค้า</td></tr>`;
                 return;
             }
 
@@ -198,10 +199,13 @@
                             <div class="text-xs text-slate-400 font-mono">${p.id}</div>
                         </td>
                         <td class="p-3 text-center text-slate-600">${p.unit}</td>
-                        <td class="p-3 text-center font-semibold text-blue-700 bg-blue-50/50">
+                        <td class="p-3 text-center font-bold text-purple-700 bg-purple-50/50 border-l border-r border-slate-100">
+                            ${p.totalSales > 0 ? p.totalSales.toLocaleString() : '-'}
+                        </td>
+                        <td class="p-3 text-center font-semibold text-blue-700 bg-blue-50/50 border-r border-slate-100">
                             ${p.q1Sales > 0 ? p.q1Sales.toLocaleString() : '-'}
                         </td>
-                        <td class="p-3 text-center font-semibold text-emerald-700 bg-emerald-50/50">
+                        <td class="p-3 text-center font-semibold text-emerald-700 bg-emerald-50/50 border-r border-slate-100">
                             ${p.prevMonthSales > 0 ? p.prevMonthSales.toLocaleString() : '-'}
                         </td>
                         <td class="p-3 text-center bg-amber-50/50">
