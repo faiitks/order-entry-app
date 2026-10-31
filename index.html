@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ระบบสำรวจความต้องการสั่งซื้อสินค้า</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style> body { font-family: 'Sarabun', sans-serif; } </style>
+</head>
+<body class="bg-slate-100 min-h-screen py-6 px-4">
+
+    <!-- Loading Overlay -->
+    <div id="loadingOverlay" class="fixed inset-0 bg-slate-900 bg-opacity-50 flex flex-col items-center justify-center z-50 text-white">
+        <div class="animate-spin rounded-full h-12 w-12 border-4 border-white border-t-transparent mb-3"></div>
+        <p class="text-base font-medium">กำลังโหลดข้อมูลจาก Google Sheets...</p>
+    </div>
+
+    <div class="max-w-3xl mx-auto bg-white rounded-xl shadow-lg p-6 md:p-8">
+        <div class="border-b pb-4 mb-6 text-center md:text-left">
+            <h1 class="text-2xl font-bold text-slate-800">ระบบสำรวจความต้องการสั่งซื้อสินค้า</h1>
+            <p class="text-slate-500 text-sm mt-1">ข้อมูลบริษัท สาขา และสินค้า ดึงตรงจาก Google Sheets</p>
+        </div>
+
+        <form id="orderForm" onsubmit="submitForm(event)">
+
+            <!-- Section 1 -->
+            <div class="bg-slate-50 p-4 rounded-lg mb-6 border border-slate-200">
+                <h2 class="text-base font-semibold text-slate-700 mb-3 flex items-center gap-2">
+                    <span class="bg-blue-600 text-white w-6 h-6 rounded-full inline-flex items-center justify-center text-xs">1</span> 
+                    ข้อมูลผู้ส่งรายการ
+                </h2>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">บริษัท <span class="text-red-500">*</span></label>
+                        <select id="companySelect" required onchange="updateBranches()" class="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                            <option value="">-- กำลังโหลดข้อมูล --</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">สาขา <span class="text-red-500">*</span></label>
+                        <select id="branchSelect" required onchange="onBranchChange()" disabled class="w-full bg-slate-100 border border-slate-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none disabled:cursor-not-allowed">
+                            <option value="">-- โปรดเลือกบริษัทก่อน --</option>
+                        </select>
+                    </div>
+
+                    <div class="md:col-span-2">
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">ชื่อ-นามสกุล ผู้บันทึกข้อมูล <span class="text-red-500">*</span></label>
+                        <input type="text" id="reporterName" required placeholder="เช่น สมชาย ใจดี" class="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section 2 -->
+            <div class="mb-6">
+                <div class="flex justify-between items-center mb-3">
+                    <h2 class="text-base font-semibold text-slate-700 flex items-center gap-2">
+                        <span class="bg-blue-600 text-white w-6 h-6 rounded-full inline-flex items-center justify-center text-xs">2</span> 
+                        รายการสินค้าที่ต้องการสั่งซื้อ
+                    </h2>
+                </div>
+
+                <div id="itemList" class="space-y-4"></div>
+
+                <button type="button" onclick="addItemRow()" class="mt-4 w-full md:w-auto bg-slate-100 border border-dashed border-slate-400 text-slate-700 font-medium py-2 px-4 rounded-lg text-sm hover:bg-slate-200 transition flex items-center justify-center gap-2">
+                    + เพิ่มรายการสินค้า
+                </button>
+            </div>
+
+            <div class="pt-4 border-t">
+                <button type="submit" id="submitBtn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-lg shadow-md transition duration-200 text-base">
+                    ยืนยันและส่งรายการสั่งซื้อ
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <script>
+        const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzTmYKk8EnW8b_7MXw3gke0i31zzBZ1CVgALjmR-9hnhCzw60oEEPSnHdfSdkE9NSG92g/exec';
+
+        let masterCompanyBranches = {};
+        let masterProducts = [];
+        let rowCounter = 0;
+
+        window.onload = async function() {
+            await loadInitialData();
+            addItemRow();
+        };
+
+        async function loadInitialData() {
+            try {
+                const res = await fetch(`${GOOGLE_SCRIPT_URL}?action=getInitialData`);
+                const data = await res.json();
+
+                if (data.status === 'success') {
+                    masterCompanyBranches = data.companies;
+                    masterProducts = data.products;
+
+                    const companySelect = document.getElementById('companySelect');
+                    companySelect.innerHTML = '<option value="">-- เลือกบริษัท --</option>';
+                    Object.keys(masterCompanyBranches).forEach(comp => {
+                        companySelect.innerHTML += `<option value="${comp}">${comp}</option>`;
+                    });
+
+                    document.getElementById('loadingOverlay').classList.add('hidden');
+                } else {
+                    alert('ไม่สามารถดึงข้อมูล Master จาก Google Sheets ได้');
+                }
+            } catch (err) {
+                alert('เกิดข้อผิดพลาดในการเชื่อมต่อ Google Sheets');
+            }
+        }
+
+        function updateBranches() {
+            const comp = document.getElementById('companySelect').value;
+            const branchSelect = document.getElementById('branchSelect');
+            branchSelect.innerHTML = '<option value="">-- เลือกสาขา --</option>';
+
+            if (comp && masterCompanyBranches[comp]) {
+                branchSelect.disabled = false;
+                branchSelect.classList.remove('bg-slate-100');
+                masterCompanyBranches[comp].forEach(b => {
+                    branchSelect.innerHTML += `<option value="${b}">${b}</option>`;
+                });
+            } else {
+                branchSelect.disabled = true;
+                branchSelect.classList.add('bg-slate-100');
+            }
+
+            document.querySelectorAll('.item-row').forEach(row => {
+                fetchSalesHistory(row.dataset.rowId);
+            });
+        }
+
+        function addItemRow() {
+            rowCounter++;
+            const rowId = rowCounter;
+            const itemList = document.getElementById('itemList');
+
+            let productOptions = '<option value="">-- เลือกสินค้า --</option>';
+            masterProducts.forEach(p => {
+                productOptions += `<option value="${p.id}" data-name="${p.name}" data-unit="${p.unit}">${p.id} - ${p.name}</option>`;
+            });
+
+            const rowDiv = document.createElement('div');
+            rowDiv.className = 'item-row bg-white border border-slate-200 rounded-lg p-4 shadow-sm relative';
+            rowDiv.dataset.rowId = rowId;
+            rowDiv.dataset.avgSales = 0;
+
+            rowDiv.innerHTML = `
+                <div class="grid grid-cols-1 md:grid-cols-12 gap-3 items-center">
+                    <div class="md:col-span-5">
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">สินค้า</label>
+                        <select class="product-select w-full bg-white border border-slate-300 rounded-md p-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none" required onchange="onProductSelectChange(${rowId})">
+                            ${productOptions}
+                        </select>
+                    </div>
+                    <div class="md:col-span-3">
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">จำนวนสั่งซื้อ</label>
+                        <input type="number" min="1" required placeholder="ใส่จำนวน" oninput="checkOrderQtyLimit(${rowId})" class="order-qty w-full bg-white border border-slate-300 rounded-md p-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                    </div>
+                    <div class="md:col-span-3">
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">หน่วยนับ</label>
+                        <input type="text" readonly placeholder="-" class="unit-input w-full bg-slate-100 border border-slate-300 rounded-md p-2 text-sm text-slate-600 font-medium">
+                    </div>
+                    <div class="md:col-span-1 text-right md:text-center mt-2 md:mt-4">
+                        <button type="button" onclick="removeItemRow(${rowId})" class="text-red-500 hover:text-red-700 p-1 text-xs font-semibold">ลบ</button>
+                    </div>
+                </div>
+
+                <div id="qtyWarning-${rowId}" class="mt-2 text-xs text-amber-700 bg-amber-100 border border-amber-300 rounded-md p-2 hidden"></div>
+
+                <div id="salesBadge-${rowId}" class="mt-2 bg-blue-50 border border-blue-200 rounded-md p-2 text-xs text-slate-700 hidden">
+                    <span class="font-bold text-blue-800">📊 สถิตียอดขาย:</span>
+                    <span class="sales-info ml-1">กำลังโหลด...</span>
+                </div>
+            `;
+            itemList.appendChild(rowDiv);
+        }
+
+        function onProductSelectChange(rowId) {
+            const row = document.querySelector(`.item-row[data-row-id="${rowId}"]`);
+            const select = row.querySelector('.product-select');
+            const selectedOpt = select.options[select.selectedIndex];
+            const unitInput = row.querySelector('.unit-input');
+
+            unitInput.value = selectedOpt.dataset.unit || 'ชิ้น';
+            fetchSalesHistory(rowId);
+        }
+
+        async function fetchSalesHistory(rowId) {
+            const company = document.getElementById('companySelect').value;
+            const branch = document.getElementById('branchSelect').value;
+            const row = document.querySelector(`.item-row[data-row-id="${rowId}"]`);
+            const productId = row.querySelector('.product-select').value;
+            const badge = document.getElementById(`salesBadge-${rowId}`);
+            const salesInfo = badge.querySelector('.sales-info');
+
+            if (!productId || !branch) {
+                badge.classList.add('hidden');
+                row.dataset.avgSales = 0;
+                return;
+            }
+
+            badge.classList.remove('hidden');
+            salesInfo.innerHTML = '<span class="text-slate-500">⏳ กำลังดึงข้อมูล...</span>';
+
+            try {
+                const url = `${GOOGLE_SCRIPT_URL}?action=getSalesHistory&company=${encodeURIComponent(company)}&branch=${encodeURIComponent(branch)}&productId=${encodeURIComponent(productId)}`;
+                const res = await fetch(url);
+                const result = await res.json();
+
+                if (result.status === 'success') {
+                    salesInfo.innerHTML = `ยอดขายล่าสุด: <strong class="text-slate-900">${result.lastSales}</strong> ${result.unit} | ยอดขายเฉลี่ย: <strong class="text-slate-900">${result.avgSales}</strong> ${result.unit}`;
+                    row.dataset.avgSales = result.avgSales || 0;
+                    checkOrderQtyLimit(rowId);
+                } else {
+                    salesInfo.innerHTML = `<span class="text-amber-600">⚠️ ไม่พบประวัติยอดขายของสาขานี้</span>`;
+                    row.dataset.avgSales = 0;
+                }
+            } catch (err) {
+                salesInfo.innerHTML = `<span class="text-red-500">❌ ดึงข้อมูลไม่สำเร็จ</span>`;
+                row.dataset.avgSales = 0;
+            }
+        }
+
+        function checkOrderQtyLimit(rowId) {
+            const row = document.querySelector(`.item-row[data-row-id="${rowId}"]`);
+            const qtyInput = row.querySelector('.order-qty');
+            const warningBadge = document.getElementById(`qtyWarning-${rowId}`);
+            const orderQty = Number(qtyInput.value) || 0;
+            const avgSales = Number(row.dataset.avgSales) || 0;
+
+            if (avgSales > 0 && orderQty > (avgSales * 2)) {
+                warningBadge.classList.remove('hidden');
+                warningBadge.innerHTML = `⚠️ <strong>แจ้งเตือน:</strong> จำนวนที่สั่งซื้อ (${orderQty}) สูงกว่ายอดขายเฉลี่ยเกิน 2 เท่า (ยอดเฉลี่ย: ${avgSales})`;
+                qtyInput.classList.add('border-amber-500', 'bg-amber-50');
+            } else {
+                warningBadge.classList.add('hidden');
+                qtyInput.classList.remove('border-amber-500', 'bg-amber-50');
+            }
+        }
+
+        function onBranchChange() {
+            document.querySelectorAll('.item-row').forEach(row => {
+                fetchSalesHistory(row.dataset.rowId);
+            });
+        }
+
+        function removeItemRow(rowId) {
+            if (document.querySelectorAll('.item-row').length <= 1) {
+                alert('ต้องมีรายการอย่างน้อย 1 รายการ');
+                return;
+            }
+            document.querySelector(`.item-row[data-row-id="${rowId}"]`).remove();
+        }
+
+        async function submitForm(e) {
+            e.preventDefault();
+            const submitBtn = document.getElementById('submitBtn');
+            const items = [];
+            let overLimitProducts = [];
+
+            document.querySelectorAll('.item-row').forEach(row => {
+                const select = row.querySelector('.product-select');
+                const opt = select.options[select.selectedIndex];
+                const qty = Number(row.querySelector('.order-qty').value) || 0;
+                const unit = row.querySelector('.unit-input').value;
+                const avgSales = Number(row.dataset.avgSales) || 0;
+
+                if (select.value && qty > 0) {
+                    items.push({
+                        productId: select.value,
+                        productName: opt.dataset.name,
+                        quantity: qty,
+                        unit: unit
+                    });
+
+                    if (avgSales > 0 && qty > (avgSales * 2)) {
+                        overLimitProducts.push(`- ${opt.dataset.name}: สั่ง ${qty} ${unit} (ยอดเฉลี่ย ${avgSales} ${unit})`);
+                    }
+                }
+            });
+
+            if (items.length === 0) return alert('โปรดเลือกสินค้าอย่างน้อย 1 รายการ');
+
+            if (overLimitProducts.length > 0) {
+                const confirmMsg = "⚠️ ยืนยันการสั่งซื้อปริมาณสูงเกินปกติ:\n\n" + 
+                                   overLimitProducts.join("\n") + 
+                                   "\n\nคุณแน่ใจหรือไม่ว่าต้องการยืนยันการสั่งซื้อจำนวนนี้?";
+                if (!confirm(confirmMsg)) return;
+            }
+
+            submitBtn.disabled = true;
+            submitBtn.innerText = '⏳ กำลังบันทึกข้อมูล...';
+
+            try {
+                const res = await fetch(GOOGLE_SCRIPT_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                    body: JSON.stringify({
+                        company: document.getElementById('companySelect').value,
+                        branch: document.getElementById('branchSelect').value,
+                        reporter: document.getElementById('reporterName').value,
+                        items: items
+                    })
+                });
+                const result = await res.json();
+
+                if (result.status === 'success') {
+                    alert('✅ บันทึกรายการสั่งซื้อเรียบร้อยแล้ว!');
+                    location.reload();
+                } else {
+                    alert('❌ เกิดข้อผิดพลาด: ' + result.message);
+                }
+            } catch (err) {
+                alert('❌ ไม่สามารถส่งข้อมูลได้');
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.innerText = 'ยืนยันและส่งรายการสั่งซื้อ';
+            }
+        }
+    </script>
+</body>
+</html>
