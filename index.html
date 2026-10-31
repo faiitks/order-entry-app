@@ -206,4 +206,85 @@
                         </td>
                         <td class="p-3 text-center bg-amber-50/50">
                             <input type="number" min="0" placeholder="0" 
-                                   data-id
+                                   data-id="${p.id}" data-name="${p.name}" data-unit="${p.unit}"
+                                   class="order-input w-24 text-center p-1.5 border border-slate-300 rounded-md focus:ring-2 focus:ring-amber-500 focus:outline-none">
+                        </td>
+                    </tr>
+                `;
+            });
+            tbody.innerHTML = html;
+        }
+
+        function filterProducts() {
+            const query = document.getElementById('searchBox').value.toLowerCase().trim();
+            const rows = document.querySelectorAll('.product-row');
+
+            rows.forEach(row => {
+                const id = row.dataset.id.toLowerCase();
+                const name = row.dataset.name.toLowerCase();
+                if (id.includes(query) || name.includes(query)) {
+                    row.style.display = '';
+                } else {
+                    row.style.display = 'none';
+                }
+            });
+        }
+
+        async function submitForm(e) {
+            e.preventDefault();
+            const submitBtn = document.getElementById('submitBtn');
+            const inputs = document.querySelectorAll('.order-input');
+            const items = [];
+
+            inputs.forEach(input => {
+                const qty = Number(input.value) || 0;
+                if (qty > 0) {
+                    items.push({
+                        productId: input.dataset.id,
+                        productName: input.dataset.name,
+                        quantity: qty,
+                        unit: input.dataset.unit
+                    });
+                }
+            });
+
+            if (items.length === 0) {
+                return alert('⚠️ กรุณาระบุจำนวนสินค้าที่ต้องการสั่งซื้ออย่างน้อย 1 รายการ');
+            }
+
+            if (!confirm(`ยืนยันการส่งรายการสั่งซื้อทั้งหมด ${items.length} รายการ หรือไม่?`)) {
+                return;
+            }
+
+            submitBtn.disabled = true;
+            submitBtn.innerText = '⏳ กำลังบันทึกข้อมูล...';
+
+            try {
+                const res = await fetch(GOOGLE_SCRIPT_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                    body: JSON.stringify({
+                        company: document.getElementById('companySelect').value,
+                        branch: document.getElementById('branchSelect').value,
+                        reporter: document.getElementById('reporterName').value,
+                        items: items
+                    })
+                });
+                const result = await res.json();
+
+                if (result.status === 'success') {
+                    alert('✅ บันทึกรายการสั่งซื้อสำเร็จทั้งหมด ' + items.length + ' รายการ!');
+                    location.reload();
+                } else {
+                    alert('❌ เกิดข้อผิดพลาด: ' + result.message);
+                }
+            } catch (err) {
+                alert('❌ ไม่สามารถส่งข้อมูลได้');
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.innerText = 'ยืนยันและส่งรายการสั่งซื้อ';
+            }
+        }
+    </script>
+</body>
+</html>
