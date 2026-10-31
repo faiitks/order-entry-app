@@ -139,10 +139,11 @@
             const rowId = rowCounter;
             const itemList = document.getElementById('itemList');
 
-            let productOptions = '<option value="">-- เลือกสินค้า --</option>';
-            masterProducts.forEach(p => {
-                productOptions += `<option value="${p.id}" data-name="${p.name}" data-unit="${p.unit}">${p.id} - ${p.name}</option>`;
-            });
+           let productOptions = '<option value="">-- เลือกสินค้า --</option>';
+masterProducts.forEach(p => {
+    // ต้องแน่ใจว่า value="${p.id}" มีค่ารหัสสินค้าส่งออกมา
+    productOptions += `<option value="${p.id}" data-name="${p.name}" data-unit="${p.unit}">${p.id} - ${p.name}</option>`;
+});
 
             const rowDiv = document.createElement('div');
             rowDiv.className = 'item-row bg-white border border-slate-200 rounded-lg p-4 shadow-sm relative';
@@ -191,41 +192,53 @@
         }
 
         async function fetchSalesHistory(rowId) {
-            const company = document.getElementById('companySelect').value;
-            const branch = document.getElementById('branchSelect').value;
-            const row = document.querySelector(`.item-row[data-row-id="${rowId}"]`);
-            const productId = row.querySelector('.product-select').value;
-            const badge = document.getElementById(`salesBadge-${rowId}`);
-            const salesInfo = badge.querySelector('.sales-info');
+    const companySelect = document.getElementById('companySelect');
+    const branchSelect = document.getElementById('branchSelect');
+    const company = companySelect ? companySelect.value.trim() : '';
+    const branch = branchSelect ? branchSelect.value.trim() : '';
+    
+    const row = document.querySelector(`.item-row[data-row-id="${rowId}"]`);
+    if (!row) return;
 
-            if (!productId || !branch) {
-                badge.classList.add('hidden');
-                row.dataset.avgSales = 0;
-                return;
-            }
+    const select = row.querySelector('.product-select');
+    const productId = select ? select.value.trim() : '';
+    const badge = document.getElementById(`salesBadge-${rowId}`);
+    const salesInfo = badge ? badge.querySelector('.sales-info') : null;
 
-            badge.classList.remove('hidden');
-            salesInfo.innerHTML = '<span class="text-slate-500">⏳ กำลังดึงข้อมูล...</span>';
+    if (!badge || !salesInfo) return;
 
-            try {
-                const url = `${GOOGLE_SCRIPT_URL}?action=getSalesHistory&company=${encodeURIComponent(company)}&branch=${encodeURIComponent(branch)}&productId=${encodeURIComponent(productId)}`;
-                const res = await fetch(url);
-                const result = await res.json();
+    // ถ้ายังเลือกไม่ครบ ไม่ต้องยิงขอข้อมูล
+    if (!productId || !branch) {
+        badge.classList.add('hidden');
+        row.dataset.avgSales = 0;
+        return;
+    }
 
-                if (result.status === 'success') {
-                    salesInfo.innerHTML = `ยอดขายล่าสุด: <strong class="text-slate-900">${result.lastSales}</strong> ${result.unit} | ยอดขายเฉลี่ย: <strong class="text-slate-900">${result.avgSales}</strong> ${result.unit}`;
-                    row.dataset.avgSales = result.avgSales || 0;
-                    checkOrderQtyLimit(rowId);
-                } else {
-                    salesInfo.innerHTML = `<span class="text-amber-600">⚠️ ไม่พบประวัติยอดขายของสาขานี้</span>`;
-                    row.dataset.avgSales = 0;
-                }
-            } catch (err) {
-                salesInfo.innerHTML = `<span class="text-red-500">❌ ดึงข้อมูลไม่สำเร็จ</span>`;
-                row.dataset.avgSales = 0;
-            }
+    badge.classList.remove('hidden');
+    salesInfo.innerHTML = '<span class="text-slate-500">⏳ กำลังดึงข้อมูล...</span>';
+
+    const targetUrl = `${GOOGLE_SCRIPT_URL}?action=getSalesHistory&company=${encodeURIComponent(company)}&branch=${encodeURIComponent(branch)}&productId=${encodeURIComponent(productId)}`;
+    console.log("Fetching URL:", targetUrl);
+
+    try {
+        const res = await fetch(targetUrl);
+        const result = await res.json();
+        console.log("API Result:", result);
+
+        if (result.status === 'success') {
+            salesInfo.innerHTML = `ยอดขายล่าสุด: <strong class="text-slate-900">${result.lastSales}</strong> ${result.unit} | ยอดขายเฉลี่ย: <strong class="text-slate-900">${result.avgSales}</strong> ${result.unit}`;
+            row.dataset.avgSales = result.avgSales || 0;
+            checkOrderQtyLimit(rowId);
+        } else {
+            salesInfo.innerHTML = `<span class="text-amber-600">⚠️ ไม่พบประวัติยอดขายของสาขานี้ (${result.message || 'ไม่มีข้อมูล'})</span>`;
+            row.dataset.avgSales = 0;
         }
-
+    } catch (err) {
+        console.error("Fetch Error:", err);
+        salesInfo.innerHTML = `<span class="text-red-500">❌ เกิดข้อผิดพลาดในการเชื่อมต่อ (${err.message})</span>`;
+        row.dataset.avgSales = 0;
+    }
+}
         function checkOrderQtyLimit(rowId) {
             const row = document.querySelector(`.item-row[data-row-id="${rowId}"]`);
             const qtyInput = row.querySelector('.order-qty');
